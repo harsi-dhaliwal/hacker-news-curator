@@ -95,5 +95,5 @@ async function postIngest(req, res, next) {
   }
 }
 
-module.exports = { postIngest };
+module.exports = { postIngest, upsertStory, createArticleForStory };
 
