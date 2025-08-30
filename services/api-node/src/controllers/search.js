@@ -1,6 +1,7 @@
 const { query } = require("../db");
 const { clamp } = require("../utils/params");
 const { mapStoryBase } = require("../utils/mappers");
+const { TTL, sendCachedJSON } = require("../utils/caching");
 
 async function search(req, res, next) {
   try {
@@ -43,7 +44,7 @@ async function search(req, res, next) {
       score: r.score,
       match: "lexical",
     }));
-    res.json({ items });
+    sendCachedJSON(res, { items }, TTL.SEARCH);
   } catch (err) {
     next(err);
   }

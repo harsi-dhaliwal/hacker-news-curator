@@ -1,6 +1,7 @@
 const { query } = require("../db");
 const { parseArrayParam, clamp } = require("../utils/params");
 const { mapStoryBase } = require("../utils/mappers");
+const { TTL, sendCachedJSON } = require("../utils/caching");
 
 async function listStories(req, res, next) {
   try {
@@ -92,7 +93,7 @@ async function listStories(req, res, next) {
     const { rows } = await query(sql, params);
     const items = rows.map(mapStoryBase);
     const next_offset = items.length === limit ? offset + items.length : null;
-    res.json({ items, next_offset });
+    sendCachedJSON(res, { items, next_offset }, TTL.FEED);
   } catch (err) {
     next(err);
   }

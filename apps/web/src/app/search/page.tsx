@@ -8,7 +8,7 @@ export const revalidate = 60;
 async function fetchResults(q: string, k: number): Promise<SearchResults> {
   if (!q) return { items: [] };
   const base = process.env.NEXT_PUBLIC_BASE_URL || "";
-  const res = await fetch(`${base}/api/search?q=${encodeURIComponent(q)}&k=${k}`, { next: { revalidate } });
+  const res = await fetch(`${base}/backend/search?q=${encodeURIComponent(q)}&k=${k}`, { next: { revalidate } });
   if (!res.ok) throw new Error("failed_fetch");
   return res.json();
 }

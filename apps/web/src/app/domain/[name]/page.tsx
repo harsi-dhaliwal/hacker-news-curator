@@ -7,7 +7,7 @@ import EmptyState from "@/components/EmptyState";
 export const revalidate = 60;
 
 async function fetchStories(name: string): Promise<StoriesPage> {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/stories?domain=${encodeURIComponent(name)}`, {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ""}/backend/stories?domain=${encodeURIComponent(name)}`, {
     next: { revalidate },
   });
   if (!res.ok) throw new Error("failed_fetch");
