@@ -1,0 +1,5 @@
+{
+  "$id": "Story.json",
+  "type": "object",
+  "allOf": [{ "$ref": "StoryBase.json" }]
+}

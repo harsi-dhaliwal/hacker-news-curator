@@ -1,0 +1,28 @@
+{
+  "$id": "StoryBase.json",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "source": { "type": "string", "enum": ["hn", "blog", "lobsters", "devto"] },
+    "hn_id": { "type": ["integer", "null"] },
+    "title": { "type": "string" },
+    "url": { "type": ["string", "null"], "format": "uri" },
+    "domain": { "type": ["string", "null"] },
+    "author": { "type": ["string", "null"] },
+    "points": { "type": ["integer", "null"] },
+    "comments_count": { "type": ["integer", "null"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "fetched_at": { "type": "string", "format": "date-time" },
+    "tags": { "type": "array", "items": { "$ref": "Tag.json" } },
+    "topics": { "type": "array", "items": { "$ref": "Topic.json" } }
+  },
+  "required": [
+    "id",
+    "source",
+    "title",
+    "created_at",
+    "fetched_at",
+    "tags",
+    "topics"
+  ]
+}

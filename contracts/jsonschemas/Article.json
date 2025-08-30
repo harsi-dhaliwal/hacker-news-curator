@@ -1,0 +1,21 @@
+{
+  "$id": "Article.json",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "story_id": { "type": "string", "format": "uuid" },
+    "language": { "type": "string" },
+    "html": { "type": ["string", "null"] },
+    "text": { "type": "string" },
+    "word_count": { "type": "integer" },
+    "content_hash": { "type": "string" }
+  },
+  "required": [
+    "id",
+    "story_id",
+    "language",
+    "text",
+    "word_count",
+    "content_hash"
+  ]
+}

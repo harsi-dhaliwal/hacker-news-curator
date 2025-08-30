@@ -1,0 +1,241 @@
+openapi: 3.0.3
+info:
+  title: Hacker News Curator API
+  version: 0.1.0
+servers:
+  - url: https://api.example.com
+paths:
+  /stories:
+    get:
+      summary: List stories (curated feed)
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Full-text query (lexical)
+        - in: query
+          name: semantic
+          schema: { type: string }
+          description: Semantic query (will use embeddings)
+        - in: query
+          name: tags
+          schema:
+            type: array
+            items: { type: string }
+          style: form
+          explode: false
+          description: Comma-separated tag slugs
+        - in: query
+          name: topics
+          schema:
+            type: array
+            items: { type: string }
+          style: form
+          explode: false
+        - in: query
+          name: domain
+          schema: { type: string }
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [hot, newest, points, comments]
+          default: hot
+        - in: query
+          name: since
+          schema: { type: string, format: date-time }
+          description: Only items after this time
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: Stories page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoriesPage"
+  /stories/{id}:
+    get:
+      summary: Get a single story
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Story
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoryFull" }
+        "404": { description: Not found }
+  /search:
+    get:
+      summary: Hybrid search (semantic + lexical)
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: semantic
+          schema: { type: string }
+        - in: query
+          name: k
+          schema: { type: integer, default: 30, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResults"
+  /tags:
+    get:
+      summary: List available tags
+      responses:
+        "200":
+          description: Tags
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Tag" }
+  /topics:
+    get:
+      summary: List available topics
+      responses:
+        "200":
+          description: Topics
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Topic" }
+
+  # Internal/ingest endpoints (behind auth/reverse proxy)
+  /_internal/ingest/hn:
+    post:
+      summary: Ingest a Hacker News item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IngestRequest" }
+      responses:
+        "202": { description: Accepted }
+  /_internal/reindex:
+    post:
+      summary: Rebuild embeddings / tsvector for a story or all
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                story_id: { type: string, format: uuid, nullable: true }
+      responses:
+        "202": { description: Accepted }
+
+components:
+  schemas:
+    StoryBase:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        source: { type: string, enum: [hn, blog, lobsters, devto], example: hn }
+        hn_id:
+          { type: integer, nullable: true, description: "Hacker News item id" }
+        title: { type: string }
+        url: { type: string, format: uri, nullable: true }
+        domain: { type: string, nullable: true }
+        author: { type: string, nullable: true }
+        points: { type: integer, nullable: true }
+        comments_count: { type: integer, nullable: true }
+        created_at: { type: string, format: date-time }
+        fetched_at: { type: string, format: date-time }
+        tags:
+          type: array
+          items: { $ref: "#/components/schemas/Tag" }
+        topics:
+          type: array
+          items: { $ref: "#/components/schemas/Topic" }
+    StoryFull:
+      allOf:
+        - $ref: "#/components/schemas/StoryBase"
+        - type: object
+          properties:
+            article:
+              $ref: "#/components/schemas/Article"
+            summaries:
+              type: array
+              items: { $ref: "#/components/schemas/Summary" }
+            rank_signals:
+              $ref: "#/components/schemas/RankSignals"
+    Article:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        story_id: { type: string, format: uuid }
+        language: { type: string, example: "en" }
+        html: { type: string, nullable: true }
+        text: { type: string }
+        word_count: { type: integer }
+        content_hash: { type: string }
+    Summary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        story_id: { type: string, format: uuid }
+        model: { type: string, example: "gpt-4.1" }
+        lang: { type: string, example: "en" }
+        summary: { type: string }
+        created_at: { type: string, format: date-time }
+    Tag:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string, example: "ai" }
+        name: { type: string, example: "AI" }
+        kind: { type: string, enum: [topic, tech, meta], default: tech }
+    Topic:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+    RankSignals:
+      type: object
+      properties:
+        hot_score: { type: number, format: float }
+        decay_ts: { type: string, format: date-time }
+        click_count: { type: integer, nullable: true }
+        dwell_ms_avg: { type: integer, nullable: true }
+    StoriesPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/StoryBase" }
+        next_offset: { type: integer, nullable: true }
+    SearchResults:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              story: { $ref: "#/components/schemas/StoryBase" }
+              score: { type: number, format: float }
+              match: { type: string, enum: [semantic, lexical, hybrid] }
+    IngestRequest:
+      type: object
+      properties:
+        hn_id: { type: integer }
+        force_refresh: { type: boolean, default: false }
+      required: [hn_id]
