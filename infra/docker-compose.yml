@@ -1,0 +1,105 @@
+version: "3.9"
+
+name: hn-curator-local
+
+services:
+  db:
+    image: ankane/pgvector:latest
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: hn_curator
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d hn_curator"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ../services/api-node
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/hn_curator
+      REDIS_URL: redis://redis:6379
+      PORT: 4000
+      LOG_LEVEL: info
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+
+  ingest:
+    build:
+      context: ../services/ingest-node
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/hn_curator
+      REDIS_URL: redis://redis:6379
+      PORT: 3001
+      LOG_LEVEL: info
+      HN_POLL_INTERVAL_SEC: 0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+
+  summarizer:
+    build:
+      context: ../services/summarizer-py
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/hn_curator
+      EMBEDDING_MODEL_KEY: default
+      LOG_LEVEL: info
+      PORT: 8000
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  worker:
+    build:
+      context: ../services/worker-py
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/hn_curator
+      REDIS_URL: redis://redis:6379
+      SUMMARIZER_URL: http://summarizer:8000
+      LOG_LEVEL: info
+      PORT: 9000
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      summarizer:
+        condition: service_started
+    ports:
+      - "9000:9000"
+
+volumes:
+  pgdata:
+
