@@ -1,0 +1,27 @@
+# Python service ignores
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Virtual envs
+.venv/
+venv/
+env/
+.python-version
+
+# Env files
+.env
+.env.*
+
+# OS/IDE
+.DS_Store
+.vscode/
+.idea/
