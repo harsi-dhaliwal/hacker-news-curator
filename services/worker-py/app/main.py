@@ -1,32 +1,52 @@
+"""CLI entrypoint for the worker service (no HTTP server).
+
+Run with: python -m app.main
+"""
+
 import asyncio
-import os
-from fastapi import FastAPI
-from .routes.health import router as health_router
-from .worker import Worker
+import signal
+import sys
+
+from .worker import run_worker
+from .util import setup_logging, get_logger
+from .config import load_config
 
 
-app = FastAPI(title="worker-py")
-app.include_router(health_router)
+def main() -> int:
+    setup_logging()
+    log = get_logger()
+    cfg = load_config()
 
+    stop_event = asyncio.Event()
 
-worker: Worker | None = None
+    def _handle_sig(signame: str):
+        log.info(
+            "signal received", extra={"svc": "worker", "signal": signame}
+        )
+        stop_event.set()
 
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
-@app.on_event("startup")
-async def on_startup():
-    global worker
-    worker = Worker()
-    asyncio.create_task(worker.run_forever())
+    for s in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(s, _handle_sig, s.name)
+        except NotImplementedError:
+            # add_signal_handler not supported on some platforms (e.g., Windows)
+            pass
 
-
-@app.on_event("shutdown")
-async def on_shutdown():
-    global worker
-    if worker:
-        await worker.stop()
+    try:
+        loop.run_until_complete(run_worker(cfg, stop_event))
+        return 0
+    except Exception as e:
+        log.exception("worker crashed", extra={"svc": "worker"})
+        return 1
+    finally:
+        try:
+            loop.run_until_complete(asyncio.sleep(0))
+        finally:
+            loop.close()
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 9000)))
-
+    raise SystemExit(main())

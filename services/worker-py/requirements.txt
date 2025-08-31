@@ -1,7 +1,5 @@
-fastapi==0.100.0
-uvicorn[standard]==0.23.2
-psycopg[binary]==3.1.12
-redis==5.0.1
-httpx==0.24.1
-beautifulsoup4==4.12.2
-lxml==4.9.3
+psycopg[binary,pool]>=3.1
+redis>=5
+httpx>=0.24
+beautifulsoup4>=4.12
+lxml>=4.9

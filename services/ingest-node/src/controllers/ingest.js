@@ -1,5 +1,7 @@
 const { query } = require("../db");
 const { enqueue } = require("../queue");
+const { createLogger } = require("../utils/logger");
+const log = createLogger("api");
 const { getDomain } = require("../utils/url");
 const { contentHash } = require("../utils/hash");
 
@@ -61,6 +63,7 @@ async function createArticleForStory({ story_id, text, language = "en" }) {
 async function postIngest(req, res, next) {
   try {
     const body = req.body || {};
+    log.debug("POST /ingest", { body });
     // Accept either an HN item or a generic URL + title
     const story_id = await upsertStory({
       source: body.source || (body.hn_id ? "hn" : "blog"),
@@ -81,19 +84,21 @@ async function postIngest(req, res, next) {
       await enqueue("SUMMARIZE", { job_key: null, story_id, article_id, attempt: 1 });
       await enqueue("EMBED", { job_key: null, story_id, article_id, model_key: "default", attempt: 1 });
       await enqueue("TAG", { job_key: null, story_id, article_id, attempt: 1 });
+      log.debug("text-only ingest", { story_id, article_id });
     }
 
     // If URL present, enqueue FETCH_ARTICLE for worker
     if (body.url) {
       const job_key = `FETCH_ARTICLE:${story_id}`;
       await enqueue("FETCH_ARTICLE", { job_key, story_id, article_id: null, attempt: 1 }, job_key);
+      log.debug("url ingest queued fetch", { story_id });
     }
 
     res.status(202).json({ accepted: true, story_id, article_id });
   } catch (err) {
+    log.error("POST /ingest failed", { error: err.message });
     next(err);
   }
 }
 
 module.exports = { postIngest, upsertStory, createArticleForStory };
-

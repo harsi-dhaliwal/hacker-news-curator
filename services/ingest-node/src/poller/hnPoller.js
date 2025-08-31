@@ -1,5 +1,6 @@
 const config = require("../config");
-const { enqueue, redis } = require("../queue");
+const { enqueue, getRedis } = require("../queue");
+const { createLogger } = require("../utils/logger");
 const { upsertStory, createArticleForStory } = require("../controllers/ingest");
 
 const HN_API = "https://hacker-news.firebaseio.com/v0";
@@ -7,8 +8,10 @@ const LAST_ID_KEY = "hn:poller:last_id";
 
 let timer = null;
 let lastId = null;
+const log = createLogger("hn-poller");
 
 async function fetchJSON(url) {
+  log.info("fetching url", { url });
   const res = await fetch(url);
   if (!res.ok) throw new Error(`request failed ${res.status}`);
   return res.json();
@@ -33,6 +36,11 @@ async function enqueueArticlePipeline(story_id, article_id) {
 
 async function processItem(item) {
   if (!item || item.type !== "story") return;
+  if (process.env.LOG_LEVEL === "debug") {
+    console.log(
+      `[hn-poller] processing story ${item.id}: ${item.title || "(no title)"}`
+    );
+  }
   const story_id = await upsertStory({
     source: "hn",
     hn_id: item.id,
@@ -50,6 +58,11 @@ async function processItem(item) {
       text: item.text,
     });
     await enqueueArticlePipeline(story_id, article_id);
+    if (process.env.LOG_LEVEL === "debug") {
+      console.log(
+        `[hn-poller] enqueued summarize/embed/tag for story ${story_id} (ask HN)`
+      );
+    }
   } else if (item.url) {
     const job_key = `FETCH_ARTICLE:${story_id}`;
     await enqueue(
@@ -57,21 +70,24 @@ async function processItem(item) {
       { job_key, story_id, article_id: null, attempt: 1 },
       job_key
     );
+    if (process.env.LOG_LEVEL === "debug") {
+      console.log(
+        `[hn-poller] enqueued fetch for story ${story_id} -> ${item.url}`
+      );
+    }
   }
 }
 
 async function tick() {
   try {
     if (lastId === null) {
-      const stored = await redis.get(LAST_ID_KEY);
+      const stored = await getRedis().get(LAST_ID_KEY);
       if (stored) {
         lastId = parseInt(stored, 10);
       } else {
         lastId = await fetchJSON(`${HN_API}/maxitem.json`);
-        await redis.set(LAST_ID_KEY, String(lastId));
-        if (process.env.LOG_LEVEL === "debug") {
-          console.log(`[hn-poller] initialized at ${lastId}`);
-        }
+        await getRedis().set(LAST_ID_KEY, String(lastId));
+        log.debug("initialized", { lastId });
         return;
       }
     }
@@ -85,7 +101,7 @@ async function tick() {
         await processItem(item);
       }
       lastId = maxId;
-      await redis.set(LAST_ID_KEY, String(lastId));
+      await getRedis().set(LAST_ID_KEY, String(lastId));
     }
 
     const updates = await fetchJSON(`${HN_API}/updates.json`);
@@ -98,17 +114,21 @@ async function tick() {
       }
     }
   } catch (e) {
-    console.error("[hn-poller] tick error", e);
+    log.error("tick error", { error: e.message });
   }
 }
 
 function startHNPoller() {
   const interval = config.pollIntervalSec;
-  if (!interval || interval <= 0) return; // disabled by default
+
+  if (!interval || interval <= 0) {
+    log.info("disabled");
+    return; // disabled by default
+  }
   clearInterval(timer);
   timer = setInterval(tick, interval * 1000);
   timer.unref?.();
-  console.log(`[hn-poller] started with ${interval}s interval`);
+  log.info("started", { intervalSec: interval });
 }
 
 module.exports = { startHNPoller };

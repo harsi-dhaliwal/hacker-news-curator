@@ -1,11 +1,14 @@
 from typing import Optional
 import httpx
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, FeatureNotFound
 from ..db import upsert_article_from_text, link_story_article, get_story_url_title
 
 
 def extract_main_text(html: str) -> str:
-    soup = BeautifulSoup(html, "lxml")
+    try:
+        soup = BeautifulSoup(html, "lxml")
+    except FeatureNotFound:
+        soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     # Heuristic: join paragraphs with a blank space

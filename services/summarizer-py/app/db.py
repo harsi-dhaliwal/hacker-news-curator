@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from psycopg.pool import ConnectionPool
+from psycopg_pool import ConnectionPool
 from .config import config
 from pgvector.psycopg import register_vector, Vector
 
