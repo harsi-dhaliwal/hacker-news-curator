@@ -1,12 +1,17 @@
 FROM python:3.11-slim
 WORKDIR /app
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  ca-certificates \
+    ca-certificates \
   && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
+
 COPY app ./app
 
-# No ports exposed; process is a background worker (no HTTP)
-CMD ["python","-m","app.main"]
+ENV PORT=8001
+EXPOSE 8001
+
+CMD ["python","-m","app.worker"]
+

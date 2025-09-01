@@ -1,26 +1,23 @@
-# Coding Agent Context — Worker (Python)
+# Coding Agent Context — Scraper Worker (Python)
 
 ## Role
 
-Run the job pipeline reliably.
+Fetch, normalize, and extract article content for stories from the ingest pipeline, dedupe and write to Postgres, then enqueue summarizer-ready messages to `summarizer:in`. Robust retries, DLQ, and structured logs.
 
 ## Inputs
 
 - `docs/PIPELINE.md`
-- `docs/QUEUES_JOBS.md`
 - `docs/DATA_MODEL.md`
 
 ## Deliverables
 
-- Queues + processors: `FETCH_ARTICLE`, `SUMMARIZE`, `EMBED`, `TAG`, `REFRESH_HN_STATS`.
-- Utilities:
-  - URL canonicalizer, robots.txt checker, extractor (Readability → fallback).
-  - `content_hash(text[, canonical_url])`.
-  - Idempotent upserts and `story.article_id` linking.
-- Job state: retries, backoff, dead-letter; structured logs.
+- Redis queues/streams: input `ingest:out` (BLPOP), output `summarizer:in` (XADD), plus `scraper:retry` and `scraper:dlq`.
+- Modules: `redis_io.py`, `fetcher.py`, `extractor.py`, `normalize.py`, `db.py`, `payloads.py`, `logging.py`, `worker.py`.
+- Idempotency: `scraper:done:{story_id}` TTL 7d; `FORCE=true` override.
+- Structured JSON logs and counters (log-derived).
 
 ## Acceptance criteria
 
-- No duplicate `article` rows for same content (hash).
-- Ask HN/Jobs create `article.text` from `item.text`.
-- After a story is processed, `/api/stories` shows it with summary present (if model available).
+- New articles are upserted with content_hash de-duplication; `story.article_id` linked.
+- Messages are emitted to `summarizer:in` matching the summarizer’s expected schema.
+- Retryable failures back off and DLQ is populated for non-retryable or exhausted attempts.

@@ -1,8 +1,9 @@
 const crypto = require("node:crypto");
+const { config } = require("../config");
 
 const TTL = {
-  FEED: 60,
-  SEARCH: 60,
+  FEED: config.cache.ttl.feed,
+  SEARCH: config.cache.ttl.search,
 };
 
 function etag(body) {

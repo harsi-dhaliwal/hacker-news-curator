@@ -9,24 +9,24 @@
    - If `url`: enqueue **FETCH_ARTICLE(story_id)**.
    - If text-only (Ask HN/Jobs): create article from `item.text`; enqueue **SUMMARIZE**, **EMBED**, **TAG**.
 
-2. **FETCH_ARTICLE** (worker-py)
+2. **FETCH_ARTICLE** (scraper-py)
 
    - Fetch HTML (respect robots.txt), extract main content.
    - Canonicalize URL, compute `content_hash`.
    - Upsert `article` by `content_hash`. Link `story.article_id`.
    - Enqueue **SUMMARIZE**, **EMBED**, **TAG**.
 
-3. **SUMMARIZE** (worker-py → summarizer-py)
+3. **SUMMARIZE** (scraper-py → summarizer-py)
 
    - Input: `article_id`.
    - Output: `summary(article_id, model, lang, summary)`.
 
-4. **EMBED** (worker-py → summarizer-py)
+4. **EMBED** (future) (summarizer-py)
 
    - Input: `article_id`, `model_key`.
    - Output: `embedding(article_id, model_key, vector)`.
 
-5. **TAG** (worker-py)
+5. **TAG** (future)
 
    - Heuristics/model → tag slugs.
    - Upsert `tag`, insert `story_tag`.

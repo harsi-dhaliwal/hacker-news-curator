@@ -1,5 +1,5 @@
 const { query } = require("../db");
-const { enqueue } = require("../queue");
+const { enqueue, enqueueToScraper } = require("../queue");
 const { createLogger } = require("../utils/logger");
 const log = createLogger("api");
 const { getDomain } = require("../utils/url");
@@ -56,7 +56,10 @@ async function createArticleForStory({ story_id, text, language = "en" }) {
     [language, text, wc, hash]
   );
   const article_id = rows[0].id;
-  await query(`UPDATE story SET article_id = $1 WHERE id = $2`, [article_id, story_id]);
+  await query(`UPDATE story SET article_id = $1 WHERE id = $2`, [
+    article_id,
+    story_id,
+  ]);
   return article_id;
 }
 
@@ -81,17 +84,40 @@ async function postIngest(req, res, next) {
     if (!body.url && body.text) {
       article_id = await createArticleForStory({ story_id, text: body.text });
       // Enqueue SUMMARIZE + EMBED + TAG
-      await enqueue("SUMMARIZE", { job_key: null, story_id, article_id, attempt: 1 });
-      await enqueue("EMBED", { job_key: null, story_id, article_id, model_key: "default", attempt: 1 });
+      await enqueue("SUMMARIZE", {
+        job_key: null,
+        story_id,
+        article_id,
+        attempt: 1,
+      });
+      await enqueue("EMBED", {
+        job_key: null,
+        story_id,
+        article_id,
+        model_key: "default",
+        attempt: 1,
+      });
       await enqueue("TAG", { job_key: null, story_id, article_id, attempt: 1 });
       log.debug("text-only ingest", { story_id, article_id });
     }
 
-    // If URL present, enqueue FETCH_ARTICLE for worker
+    // If URL present, enqueue to scraper for content fetching
     if (body.url) {
-      const job_key = `FETCH_ARTICLE:${story_id}`;
-      await enqueue("FETCH_ARTICLE", { job_key, story_id, article_id: null, attempt: 1 }, job_key);
-      log.debug("url ingest queued fetch", { story_id });
+      const story = {
+        id: story_id,
+        hn_id: body.hn_id,
+        source: body.source || (body.hn_id ? "hn" : "blog"),
+        title: body.title,
+        url: body.url,
+        domain: null, // Will be extracted by scraper
+        author: body.author || null,
+        created_at: body.created_at
+          ? new Date(body.created_at).toISOString()
+          : new Date().toISOString(),
+      };
+
+      const trace_id = await enqueueToScraper(story);
+      log.debug("url ingest queued to scraper", { story_id, trace_id });
     }
 
     res.status(202).json({ accepted: true, story_id, article_id });

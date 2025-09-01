@@ -9,52 +9,71 @@ async function listStories(req, res, next) {
     const tags = parseArrayParam(req.query.tags);
     const topics = parseArrayParam(req.query.topics);
     const domain = req.query.domain ? req.query.domain.toString().trim() : null;
-    const sort = ["hot", "newest", "points", "comments"].includes((req.query.sort || "hot").toString())
-      ? req.query.sort.toString()
+    const sortParam = req.query.sort ? req.query.sort.toString() : "hot";
+    const sort = ["hot", "newest", "points", "comments"].includes(sortParam)
+      ? sortParam
       : "hot";
     const limit = clamp(parseInt(req.query.limit || "30", 10), 1, 100);
     const offset = Math.max(parseInt(req.query.offset || "0", 10), 0);
-    const since = req.query.since ? new Date(req.query.since.toString()) : null;
+
+    // Improved date validation
+    let since = null;
+    if (req.query.since) {
+      const sinceDate = new Date(req.query.since.toString());
+      if (!isNaN(sinceDate.getTime())) {
+        since = sinceDate;
+      }
+    }
 
     const where = [];
     const params = [];
+    let paramIndex = 1;
 
     if (q) {
       params.push(q);
       where.push(
         `EXISTS (
            SELECT 1 FROM article a
-           WHERE a.id = s.article_id AND a.tsv @@ plainto_tsquery('simple', $${params.length})
+           WHERE a.id = s.article_id AND a.tsv @@ plainto_tsquery('simple', $${paramIndex})
          )`
       );
+      paramIndex++;
     }
+
     if (domain) {
       params.push(domain);
-      where.push(`s.domain = $${params.length}`);
+      where.push(`s.domain = $${paramIndex}`);
+      paramIndex++;
     }
-    if (since && !isNaN(since.getTime())) {
+
+    if (since) {
       params.push(since.toISOString());
-      where.push(`s.created_at >= $${params.length}`);
+      where.push(`s.created_at >= $${paramIndex}`);
+      paramIndex++;
     }
+
     if (tags.length > 0) {
       params.push(tags);
       where.push(
         `EXISTS (
            SELECT 1 FROM story_tag st
            JOIN tag t ON t.id = st.tag_id
-           WHERE st.story_id = s.id AND t.slug = ANY($${params.length}::text[])
+           WHERE st.story_id = s.id AND t.slug = ANY($${paramIndex}::text[])
          )`
       );
+      paramIndex++;
     }
+
     if (topics.length > 0) {
       params.push(topics);
       where.push(
         `EXISTS (
            SELECT 1 FROM story_topic stp
            JOIN topic tp ON tp.id = stp.topic_id
-           WHERE stp.story_id = s.id AND tp.slug = ANY($${params.length}::text[])
+           WHERE stp.story_id = s.id AND tp.slug = ANY($${paramIndex}::text[])
          )`
       );
+      paramIndex++;
     }
 
     const orderBy =
@@ -66,6 +85,7 @@ async function listStories(req, res, next) {
         ? "s.comments_count DESC NULLS LAST, s.created_at DESC"
         : "COALESCE(s.hot_score, 0) DESC, s.created_at DESC";
 
+    // Add limit and offset parameters
     params.push(limit);
     params.push(offset);
 
@@ -102,6 +122,12 @@ async function listStories(req, res, next) {
 async function getStoryById(req, res, next) {
   try {
     const id = req.params.id;
+
+    // Validate id parameter
+    if (!id || isNaN(parseInt(id))) {
+      return res.status(400).json({ error: "Invalid story ID" });
+    }
+
     const sql = `
       SELECT
         s.id, s.source, s.hn_id, s.title, s.url, s.domain, s.author,
@@ -124,6 +150,7 @@ async function getStoryById(req, res, next) {
       LEFT JOIN rank_signals rs ON rs.story_id = s.id
       WHERE s.id = $1
     `;
+
     const { rows } = await query(sql, [id]);
     if (rows.length === 0) return res.status(404).json({ error: "Not found" });
     const r = rows[0];
@@ -165,14 +192,18 @@ async function getStoryById(req, res, next) {
     }
 
     const storyBase = mapStoryBase(r);
-    const rank_signals = r.hot_score == null && r.decay_ts == null && r.click_count == null && r.dwell_ms_avg == null
-      ? undefined
-      : {
-          hot_score: r.hot_score || 0,
-          decay_ts: r.decay_ts?.toISOString?.() || r.decay_ts,
-          click_count: r.click_count,
-          dwell_ms_avg: r.dwell_ms_avg,
-        };
+    const rank_signals =
+      r.hot_score == null &&
+      r.decay_ts == null &&
+      r.click_count == null &&
+      r.dwell_ms_avg == null
+        ? undefined
+        : {
+            hot_score: r.hot_score || 0,
+            decay_ts: r.decay_ts?.toISOString?.() || r.decay_ts,
+            click_count: r.click_count,
+            dwell_ms_avg: r.dwell_ms_avg,
+          };
 
     res.json({
       ...storyBase,
@@ -186,4 +217,3 @@ async function getStoryById(req, res, next) {
 }
 
 module.exports = { listStories, getStoryById };
-

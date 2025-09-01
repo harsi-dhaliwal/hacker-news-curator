@@ -38,4 +38,27 @@ async function enqueue(queueName, payload, jobKey) {
   return shouldPublish;
 }
 
-module.exports = { initQueue, getRedis, enqueue };
+// New function to enqueue messages in scraper-py compatible format
+async function enqueueToScraper(story, attempt = 0) {
+  const payload = {
+    trace_id: `ingest-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    story: {
+      id: story.id,
+      hn_id: story.hn_id,
+      source: story.source,
+      title: story.title,
+      url: story.url,
+      domain: story.domain,
+      author: story.author,
+      created_at: story.created_at,
+    },
+    attempt: attempt,
+    schema_version: 1,
+  };
+
+  await getRedis().lpush("ingest:out", JSON.stringify(payload));
+  log.debug("enqueued to scraper", { story_id: story.id, url: story.url });
+  return payload.trace_id;
+}
+
+module.exports = { initQueue, getRedis, enqueue, enqueueToScraper };
