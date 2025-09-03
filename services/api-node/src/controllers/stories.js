@@ -76,6 +76,11 @@ async function listStories(req, res, next) {
       paramIndex++;
     }
 
+    // Only include stories that have at least one summary for their article
+    where.push(
+      `EXISTS (SELECT 1 FROM summary smx WHERE smx.article_id = s.article_id)`
+    );
+
     const orderBy =
       sort === "newest"
         ? "s.created_at DESC"
@@ -93,7 +98,8 @@ async function listStories(req, res, next) {
       SELECT
         s.id, s.source, s.hn_id, s.title, s.url, s.domain, s.author,
         s.points, s.comments_count, s.created_at, s.fetched_at,
-        stags.tags, stopics.topics
+        stags.tags, stopics.topics,
+        ssum.summary_snippet
       FROM story_list s
       LEFT JOIN LATERAL (
         SELECT coalesce(json_agg(json_build_object('id', t.id, 'slug', t.slug, 'name', t.name, 'kind', t.kind) ORDER BY t.slug), '[]'::json) AS tags
@@ -105,13 +111,41 @@ async function listStories(req, res, next) {
         FROM story_topic stp JOIN topic tp ON tp.id = stp.topic_id
         WHERE stp.story_id = s.id
       ) stopics ON true
+      LEFT JOIN LATERAL (
+        SELECT
+          COALESCE(sm.ui_json ->> 'summary_140', LEFT(sm.summary, 160)) AS summary_snippet,
+          sm.ui_json -> 'quicktake' AS summary_quicktake,
+          NULLIF(sm.ui_json ->> 'reading_time_min', '')::int AS reading_time_min,
+          NULLIF(sm.ui_json ->> 'impact_score', '')::int AS impact_score,
+          NULLIF(sm.ui_json ->> 'confidence', '')::float AS confidence,
+          NULLIF(sm.ui_json -> 'link_props' ->> 'paywall', '')::boolean AS paywall,
+          sm.ui_json -> 'link_props' ->> 'format' AS link_format,
+          NULLIF(sm.ui_json -> 'link_props' ->> 'is_pdf', '')::boolean AS is_pdf,
+          sm.classification_json ->> 'type' AS class_type
+        FROM summary sm
+        WHERE sm.article_id = s.article_id
+        ORDER BY sm.created_at DESC
+        LIMIT 1
+      ) ssum ON true
+      -- drop expensive summaries array aggregation for list performance
       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
       ORDER BY ${orderBy}
       LIMIT $${params.length - 1} OFFSET $${params.length}
     `;
 
     const { rows } = await query(sql, params);
-    const items = rows.map(mapStoryBase);
+    const items = rows.map((row) => ({
+      ...mapStoryBase(row),
+      summary_snippet: row.summary_snippet || undefined,
+      summary_quicktake: Array.isArray(row.summary_quicktake) ? row.summary_quicktake : undefined,
+      reading_time_min: typeof row.reading_time_min === 'number' ? row.reading_time_min : undefined,
+      impact_score: typeof row.impact_score === 'number' ? row.impact_score : undefined,
+      confidence: typeof row.confidence === 'number' ? row.confidence : undefined,
+      paywall: typeof row.paywall === 'boolean' ? row.paywall : undefined,
+      link_format: row.link_format || undefined,
+      is_pdf: typeof row.is_pdf === 'boolean' ? row.is_pdf : undefined,
+      class_type: row.class_type || undefined,
+    }));
     const next_offset = items.length === limit ? offset + items.length : null;
     sendCachedJSON(res, { items, next_offset }, TTL.FEED);
   } catch (err) {
@@ -122,9 +156,8 @@ async function listStories(req, res, next) {
 async function getStoryById(req, res, next) {
   try {
     const id = req.params.id;
-
-    // Validate id parameter
-    if (!id || isNaN(parseInt(id))) {
+    // Accept UUIDs; basic presence check only
+    if (!id || typeof id !== "string" || id.length < 8) {
       return res.status(400).json({ error: "Invalid story ID" });
     }
 
@@ -178,7 +211,8 @@ async function getStoryById(req, res, next) {
     let summaries = [];
     if (r.article_id) {
       const sres = await query(
-        `SELECT id, article_id, model, lang, summary, created_at FROM summary WHERE article_id = $1 ORDER BY created_at DESC`,
+        `SELECT id, article_id, model, lang, summary, created_at, classification_json, ui_json, summarized_at
+         FROM summary WHERE article_id = $1 ORDER BY created_at DESC`,
         [r.article_id]
       );
       summaries = sres.rows.map((s) => ({
@@ -188,6 +222,9 @@ async function getStoryById(req, res, next) {
         lang: s.lang,
         summary: s.summary,
         created_at: s.created_at?.toISOString?.() || s.created_at,
+        classification: s.classification_json || undefined,
+        ui: s.ui_json || undefined,
+        summarized_at: s.summarized_at?.toISOString?.() || s.summarized_at || undefined,
       }));
     }
 

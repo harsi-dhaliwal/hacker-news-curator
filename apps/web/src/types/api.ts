@@ -29,6 +29,24 @@ export interface StoryBase {
   fetched_at: string; // ISO
   tags: Tag[];
   topics: Topic[];
+  summary_snippet?: string;
+  summary_quicktake?: string[];
+  reading_time_min?: number;
+  impact_score?: number;
+  confidence?: number;
+  paywall?: boolean;
+  link_format?: string | null;
+  class_type?: string | null;
+  is_pdf?: boolean;
+  // Optional: summaries embedded from list API (compact JSON from DB)
+  summaries?: Array<{
+    id: UUID;
+    model: string;
+    lang: string;
+    summary: string;
+    classification?: Record<string, any> | null;
+    ui?: Record<string, any> | null;
+  }>;
 }
 
 export interface Article {
@@ -48,6 +66,22 @@ export interface Summary {
   lang: string;
   summary: string;
   created_at: string; // ISO
+  classification?: {
+    primary_category?: string;
+    type?: string;
+    tags?: string[];
+    topics?: string[];
+  };
+  ui?: {
+    summary_140?: string;
+    quicktake?: string[];
+    audience?: string[];
+    impact_score?: number;
+    confidence?: number;
+    reading_time_min?: number;
+    link_props?: { paywall?: boolean; format?: string; is_pdf?: boolean };
+  };
+  summarized_at?: string; // ISO
 }
 
 export interface RankSignals {
@@ -77,4 +111,3 @@ export interface SearchResultItem {
 export interface SearchResults {
   items: SearchResultItem[];
 }
-

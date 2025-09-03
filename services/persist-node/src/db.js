@@ -63,17 +63,28 @@ export async function linkStoryTopic(storyId, topicId) {
   );
 }
 
-export async function insertSummary(articleId, model, lang, summary) {
-  // Idempotent-ish insert: avoid exact duplicates
+export async function insertSummary(articleId, model, lang, summary, classification, ui, summarizedAt) {
+  // Upsert on unique article_id: keep a single summary per article.
   const sql = `
-    INSERT INTO summary(article_id, model, lang, summary)
-    SELECT $1, $2, $3, $4
-    WHERE NOT EXISTS (
-      SELECT 1 FROM summary WHERE article_id=$1 AND model=$2 AND lang=$3 AND summary=$4
-    )
+    INSERT INTO summary(article_id, model, lang, summary, classification_json, ui_json, summarized_at)
+    VALUES ($1::uuid, $2::text, $3::text, $4::text, $5::jsonb, $6::jsonb, $7::timestamptz)
+    ON CONFLICT (article_id) DO UPDATE SET
+      model = EXCLUDED.model,
+      lang = EXCLUDED.lang,
+      summary = EXCLUDED.summary,
+      classification_json = COALESCE(EXCLUDED.classification_json, summary.classification_json),
+      ui_json = COALESCE(EXCLUDED.ui_json, summary.ui_json),
+      summarized_at = COALESCE(EXCLUDED.summarized_at, summary.summarized_at)
     RETURNING id
   `;
-  const res = await query(sql, [articleId, model, lang, summary]);
-  return res.rows[0]?.id || null;
+  const { rows } = await query(sql, [
+    articleId,
+    model,
+    lang,
+    summary,
+    classification ? JSON.stringify(classification) : null,
+    ui ? JSON.stringify(ui) : null,
+    summarizedAt || null,
+  ]);
+  return rows[0]?.id || null;
 }
-
