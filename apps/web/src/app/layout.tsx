@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "@/styles/globals.css";
 import Link from "next/link";
-import SearchBox from "@/components/SearchBox";
 
 export const metadata: Metadata = {
   title: "HN Curator",
@@ -19,16 +18,19 @@ export default function RootLayout({
         <header className="border-b border-gray-200 bg-white">
           <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 p-4">
             <nav className="flex items-center gap-4">
-              <Link href="/" className="text-base font-semibold text-orange-600 hover:text-orange-700">
+              <Link
+                href="/"
+                className="text-base font-semibold text-orange-600 hover:text-orange-700"
+              >
                 HN Curator
               </Link>
-              <Link href="/search" className="text-sm text-gray-600 hover:text-gray-900">
+              <Link
+                href="/search"
+                className="text-sm text-gray-600 hover:text-gray-900"
+              >
                 Search
               </Link>
             </nav>
-            <div className="w-full max-w-md">
-              <SearchBox />
-            </div>
           </div>
         </header>
         <main className="mx-auto max-w-5xl p-4">{children}</main>

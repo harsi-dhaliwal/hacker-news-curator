@@ -44,8 +44,8 @@ export interface StoryBase {
     model: string;
     lang: string;
     summary: string;
-    classification?: Record<string, any> | null;
-    ui?: Record<string, any> | null;
+    classification?: Record<string, unknown> | null;
+    ui?: Record<string, unknown> | null;
   }>;
 }
 
