@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import type { SearchResults } from "@/types/api";
 import StoryCard from "@/components/StoryCard";
 import SearchBox from "@/components/SearchBox";
@@ -8,12 +9,19 @@ export const revalidate = 60;
 async function fetchResults(q: string, k: number): Promise<SearchResults> {
   if (!q) return { items: [] };
   const base = process.env.NEXT_PUBLIC_BASE_URL || "";
-  const res = await fetch(`${base}/backend/search?q=${encodeURIComponent(q)}&k=${k}`, { next: { revalidate } });
+  const res = await fetch(
+    `${base}/backend/search?q=${encodeURIComponent(q)}&k=${k}`,
+    { next: { revalidate } },
+  );
   if (!res.ok) throw new Error("failed_fetch");
   return res.json();
 }
 
-export default async function SearchPage({ searchParams }: { searchParams: { q?: string; k?: string } }) {
+export default async function SearchPage({
+  searchParams,
+}: {
+  searchParams: { q?: string; k?: string };
+}) {
   const q = (searchParams.q || "").trim();
   const k = Math.max(1, Math.min(100, parseInt(searchParams.k || "30", 10)));
   const { items } = await fetchResults(q, k);
@@ -32,7 +40,9 @@ export default async function SearchPage({ searchParams }: { searchParams: { q?:
           items.map((r) => (
             <div key={r.story.id} className="space-y-1">
               <StoryCard story={r.story} />
-              <div className="text-xs text-gray-500">match: {r.match} • score: {r.score.toFixed(3)}</div>
+              <div className="text-xs text-gray-500">
+                match: {r.match} • score: {r.score.toFixed(3)}
+              </div>
             </div>
           ))
         )}
@@ -40,4 +50,3 @@ export default async function SearchPage({ searchParams }: { searchParams: { q?:
     </div>
   );
 }
-
